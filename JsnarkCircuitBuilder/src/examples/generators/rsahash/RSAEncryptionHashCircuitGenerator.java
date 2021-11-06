@@ -144,12 +144,15 @@ public class RSAEncryptionHashCircuitGenerator extends CircuitGenerator {
 	public static void main(String[] args) throws Exception {
 		int keyLength = 1024;
 		int msgLength = 3;
+		long startTime=System.currentTimeMillis();
 		RSAEncryptionHashCircuitGenerator generator = new RSAEncryptionHashCircuitGenerator(
 				"rsahash" + keyLength + "_hashencryption", keyLength, msgLength);
 		generator.generateCircuit();
 		generator.evalCircuit();
 		generator.prepFiles();
 		generator.runLibsnark();
+		long endTime=System.currentTimeMillis();  
+		System.out.println("Process time: "+(endTime-startTime)+"ms"); 
 	}
 
 }

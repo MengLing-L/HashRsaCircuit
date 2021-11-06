@@ -37,9 +37,9 @@ public class HashRSAEncryption_Test extends TestCase {
 	public void testHashEncryption() throws Exception{
 
 		
-		String plainText = "abc";
+		String plainText = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
 		//String inputStr = "abc";
-		String expectedDigest = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+		String expectedDigest = "dfe7a23fefeea519e9bbfdd1a6be94c4b2e4529dd6b7cbea83f9959c2621b13c";
 
 		
 
@@ -59,6 +59,7 @@ public class HashRSAEncryption_Test extends TestCase {
 
 			 int rsaKeyLength = keySize;
 			 int plainTextLength = plainText.length();
+			 //int plainTextLength = 32;
 			 Wire[] inputMessage;
 			 Wire[] randomness;
 			 Wire[] cipherText;
@@ -85,7 +86,7 @@ public class HashRSAEncryption_Test extends TestCase {
 				cipherText = new WireArray(cipherTextInBytes).packWordsIntoLargerWords(8, 8);
 				System.out.println(cipherText.length);
 
-				Wire[] digest = new SHA256Gadget(inputMessage, 8, plainText.length(), false, true, "").getOutputWires();
+				Wire[] digest = new SHA256Gadget(inputMessage, 8, plainTextLength, false, true, "").getOutputWires();
 				/*Wire[] msgHashBytes = new WireArray(digest).getBits(32).packBitsIntoWords(8);
 				for (int i = 0; i < 8; i++) {
 					Wire tmp = msgHashBytes[4 * i];
@@ -184,10 +185,16 @@ public class HashRSAEncryption_Test extends TestCase {
 			assertEquals(cipherTextBytes[k], cipherTextBytesFromCircuit[k]);
 		}
 
+		System.out.println(cipherTextBytes.length);
+
+		long startTime=System.currentTimeMillis();
+
 		Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
 		cipher.init(Cipher.DECRYPT_MODE, keyPair.getPrivate());
 		byte[] cipherTextDecrypted = cipher.doFinal(cipherTextBytesFromCircuit);
 		assertTrue(Arrays.equals(plainText.getBytes(), cipherTextDecrypted));
+		long endTime=System.currentTimeMillis();  
+		System.out.println("Dectypt Process time: "+(endTime-startTime)+"ms"); 
 
 		String outDigest = "";
 		for (int i=16; i< 24; i++) {
