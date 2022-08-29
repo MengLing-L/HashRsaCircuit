@@ -8,6 +8,7 @@ import java.security.Key;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.SecureRandom;
+import java.security.Security;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.util.ArrayList;
@@ -24,10 +25,11 @@ import circuit.eval.CircuitEvaluator;
 import circuit.structure.CircuitGenerator;
 import circuit.structure.Wire;
 import circuit.structure.WireArray;
-import examples.gadgets.rsa.RSAEncryptionV1_5_Gadget;
+import examples.gadgets.rsa.RSAEncryptionOAEPGadget;
 import examples.generators.rsa.RSAUtil;
 import examples.gadgets.hash.SHA256Gadget;
 import util.Util;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 
 public class HashRSAEncryption_Test extends TestCase {
@@ -43,9 +45,10 @@ public class HashRSAEncryption_Test extends TestCase {
 
 		
 
-		int keySize = 1024;
+		int keySize = 2048;
 
-		final byte[] cipherTextBytes = new byte[keySize/8];			
+		final byte[] cipherTextBytes = new byte[keySize / 8];
+
 		SecureRandom random = new SecureRandom();
 		KeyPairGenerator keyGen = KeyPairGenerator.getInstance("RSA");
 		keyGen.initialize(keySize, random);
@@ -54,18 +57,18 @@ public class HashRSAEncryption_Test extends TestCase {
 		BigInteger rsaModulusValue = ((RSAPublicKey) pubKey).getModulus();
 		
 		
-		CircuitGenerator generator = new CircuitGenerator("HashRSA" + keySize
+		CircuitGenerator generator = new CircuitGenerator("HashRSA_OAEP" + keySize
 				+ "_Enc_TestHashEncryption") {
 
 			 int rsaKeyLength = keySize;
 			 int plainTextLength = plainText.length();
 			 //int plainTextLength = 32;
 			 Wire[] inputMessage;
-			 Wire[] randomness;
+			 Wire[] seed;
 			 Wire[] cipherText;
 			 LongElement rsaModulus;
 
-			 RSAEncryptionV1_5_Gadget rsaEncryptionV1_5_Gadget;
+			 RSAEncryptionOAEPGadget rsaEncryptionOAEPGadget;
 
 			@Override
 			protected void buildCircuit() {
@@ -75,14 +78,15 @@ public class HashRSAEncryption_Test extends TestCase {
 				}
 				
 				rsaModulus = createLongElementInput(rsaKeyLength);
-				randomness = createProverWitnessWireArray(RSAEncryptionV1_5_Gadget
-						.getExpectedRandomnessLength(rsaKeyLength, plainTextLength));
-				rsaEncryptionV1_5_Gadget = new RSAEncryptionV1_5_Gadget(rsaModulus, inputMessage,
-						randomness, rsaKeyLength);
-				
-				// since randomness is a witness
-				rsaEncryptionV1_5_Gadget.checkRandomnessCompliance();
-				Wire[] cipherTextInBytes = rsaEncryptionV1_5_Gadget.getOutputWires(); // in bytes
+				seed = createProverWitnessWireArray(RSAEncryptionOAEPGadget.SHA256_DIGEST_LENGTH);
+				rsaEncryptionOAEPGadget = new RSAEncryptionOAEPGadget(
+							rsaModulus, inputMessage, seed, rsaKeyLength);
+
+					// since seed is a witness
+				rsaEncryptionOAEPGadget.checkSeedCompliance();
+					
+				Wire[] cipherTextInBytes = rsaEncryptionOAEPGadget
+							.getOutputWires(); // in bytes
 				cipherText = new WireArray(cipherTextInBytes).packWordsIntoLargerWords(8, 8);
 				System.out.println(cipherText.length);
 
@@ -101,7 +105,7 @@ public class HashRSAEncryption_Test extends TestCase {
 				System.arraycopy(cipherText, 0, hashCipherTextInBytes, 0, cipherText.length);
 				System.arraycopy(digest, 0, hashCipherTextInBytes, cipherText.length, digest.length);
 				//Wire[] hashCipherTextInBytes = new WireArray(cipherTextInBytes).addWireArray(new WireArray(msgHashBytes), msgHashBytes.length).getBits(32).packBitsIntoWords(8);
-				System.out.println(hashCipherTextInBytes.length);
+				//System.out.println(hashCipherTextInBytes.length);
 				// group every 8 bytes together
 				makeOutputArray(hashCipherTextInBytes,
 						"Output hash and cipher text");
@@ -115,13 +119,19 @@ public class HashRSAEncryption_Test extends TestCase {
 							plainText.charAt(i));
 				}
 				try {
-					Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
-					evaluator.setWireValue(this.rsaModulus, rsaModulusValue,
-							LongElement.CHUNK_BITWIDTH);
+
+					Security.addProvider(new BouncyCastleProvider());
+					Cipher cipher = Cipher.getInstance(
+								"RSA/ECB/OAEPWithSHA-256AndMGF1Padding", "BC");
+
+					evaluator
+							.setWireValue(this.rsaModulus, rsaModulusValue,
+										LongElement.CHUNK_BITWIDTH);
 
 					Key privKey = keyPair.getPrivate();
 
 					cipher.init(Cipher.ENCRYPT_MODE, pubKey, random);
+
 					byte[] tmp = cipher.doFinal(plainText.getBytes());
 					System.arraycopy(tmp, 0, cipherTextBytes, 0, keySize/8);
 					
@@ -129,8 +139,8 @@ public class HashRSAEncryption_Test extends TestCase {
 					System.arraycopy(cipherTextBytes, 0, cipherTextPadded, 1, cipherTextBytes.length);
 					cipherTextPadded[0] = 0;
 
-					byte[][] result = RSAUtil.extractRSARandomness1_5(cipherTextBytes,
-							(RSAPrivateKey) privKey);
+					byte[][] result = RSAUtil.extractRSAOAEPSeed(
+								cipherTextBytes, (RSAPrivateKey) privKey);
 
 					boolean check = Arrays.equals(result[0], plainText.getBytes());
 					if (!check) {
@@ -140,7 +150,7 @@ public class HashRSAEncryption_Test extends TestCase {
 
 					byte[] sampleRandomness = result[1];
 					for (int i = 0; i < sampleRandomness.length; i++) {
-						evaluator.setWireValue(randomness[i], (sampleRandomness[i]+256)%256);
+						evaluator.setWireValue(seed[i], (sampleRandomness[i]+256)%256);
 					}
 
 				} catch (Exception e) {
@@ -153,6 +163,10 @@ public class HashRSAEncryption_Test extends TestCase {
 
 		generator.generateCircuit();
 		generator.evalCircuit();
+		long startTime=System.currentTimeMillis();
+		generator.runLibsnark();
+		long endTime=System.currentTimeMillis();  
+		System.out.println("Proving time: "+(endTime-startTime)+"ms");
 		CircuitEvaluator evaluator = generator.getCircuitEvaluator();
 		
 		// retrieve the ciphertext from the circuit, and verify that it matches the expected ciphertext and that it decrypts correctly (using the Java built-in RSA decryptor)
@@ -167,7 +181,7 @@ public class HashRSAEncryption_Test extends TestCase {
 		ArrayList<Wire> wires = generator.getOutWires();
 		BigInteger t = BigInteger.ZERO;
 
-		for (int i=0; i< 16; i++){
+		for (int i=0; i< 32; i++){
 			BigInteger val = evaluator.getWireValue(wires.get(i));
 			t = t.add(val.shiftLeft(i*64));
 		}
@@ -178,26 +192,29 @@ public class HashRSAEncryption_Test extends TestCase {
 
 		// ignore the sign byte if any was added
 		if(t.bitLength() == keySize && cipherTextBytesFromCircuit.length == keySize/8+1){
-			cipherTextBytesFromCircuit=Arrays.copyOfRange(cipherTextBytesFromCircuit, 1, cipherTextBytesFromCircuit.length);
+			cipherTextBytesFromCircuit = Arrays.copyOfRange(cipherTextBytesFromCircuit, 1, cipherTextBytesFromCircuit.length);
 		}
-		
+
+		//System.out.println(cipherTextBytes.length);
+
 		for(int k = 0; k < cipherTextBytesFromCircuit.length; k++){
 			assertEquals(cipherTextBytes[k], cipherTextBytesFromCircuit[k]);
 		}
 
-		System.out.println(cipherTextBytes.length);
+		
 
-		long startTime=System.currentTimeMillis();
+		startTime=System.currentTimeMillis();
 
-		Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
+		Cipher cipher = Cipher.getInstance(
+					"RSA/ECB/OAEPWithSHA-256AndMGF1Padding", "BC");
 		cipher.init(Cipher.DECRYPT_MODE, keyPair.getPrivate());
 		byte[] cipherTextDecrypted = cipher.doFinal(cipherTextBytesFromCircuit);
 		assertTrue(Arrays.equals(plainText.getBytes(), cipherTextDecrypted));
-		long endTime=System.currentTimeMillis();  
+		endTime=System.currentTimeMillis();  
 		System.out.println("Dectypt Process time: "+(endTime-startTime)+"ms"); 
 
 		String outDigest = "";
-		for (int i=16; i< 24; i++) {
+		for (int i=32; i< 40; i++) {
 			outDigest += Util.padZeros(evaluator.getWireValue(wires.get(i)).toString(16), 8);
 		}
 		assertEquals(outDigest, expectedDigest);
