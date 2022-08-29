@@ -74,11 +74,11 @@ Before running the following, make sure the `PATH_TO_LIBSNARK_EXEC` property in 
 
 To build the circuit of the zero-knowledge proof system in our construction, the following command can be used
 
-    $ java -cp bin examples.generators.rsahash.RSAEncryptionHashCircuitGenerator
+    $ java -cp bin:bcprov-jdk15on-159.jar examples.generators.rsahash.RSAEncryptionHashCircuitGenerator
 
 To run one of the JUnit tests available:
 
-    $ java -cp bin:/usr/share/java/junit4.jar org.junit.runner.JUnitCore  examples.tests.rsahash.HashRSAEncryption_Test
+    $ java -cp bin:/usr/share/java/junit4.jar:bcprov-jdk15on-159.jar org.junit.runner.JUnitCore  examples.tests.rsahash.HashRSAEncryption_Test
 
 Some of the examples and tests will require bcprov-jdk15on-159.jar as well to be added to the classpath.	
 

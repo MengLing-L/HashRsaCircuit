@@ -21,6 +21,8 @@
 #include <libff/common/profiling.hpp>
 
 #include <libsnark/zk_proof_systems/ppzksnark/r1cs_ppzksnark/r1cs_ppzksnark.hpp>
+#include <chrono>
+using namespace std;
 
 namespace libsnark {
 
@@ -83,8 +85,13 @@ bool run_r1cs_ppzksnark(const r1cs_example<libff::Fr<ppT> > &example,
     }
 
     libff::print_header("R1CS ppzkSNARK Prover");
+    auto start_time = chrono::steady_clock::now();
     r1cs_ppzksnark_proof<ppT> proof = r1cs_ppzksnark_prover<ppT>(keypair.pk, example.primary_input, example.auxiliary_input);
     printf("\n"); libff::print_indent(); libff::print_mem("after prover");
+    auto end_time = chrono::steady_clock::now(); // end to count the time
+    auto running_time = end_time - start_time;
+    cout << "Proving phase takes time = "
+    << chrono::duration <double, milli> (running_time).count() << " ms" << endl;
 
     if (test_serialization)
     {
@@ -94,9 +101,15 @@ bool run_r1cs_ppzksnark(const r1cs_example<libff::Fr<ppT> > &example,
     }
 
     libff::print_header("R1CS ppzkSNARK Verifier");
+    start_time = chrono::steady_clock::now();
     const bool ans = r1cs_ppzksnark_verifier_strong_IC<ppT>(keypair.vk, example.primary_input, proof);
     printf("\n"); libff::print_indent(); libff::print_mem("after verifier");
     printf("* The verification result is: %s\n", (ans ? "PASS" : "FAIL"));
+    end_time = chrono::steady_clock::now(); // end to count the time
+    running_time = end_time - start_time;
+    cout << "Verifing phase takes time = "
+    << chrono::duration <double, milli> (running_time).count() << " ms" << endl;
+
 
     libff::print_header("R1CS ppzkSNARK Online Verifier");
     const bool ans2 = r1cs_ppzksnark_online_verifier_strong_IC<ppT>(pvk, example.primary_input, proof);
